@@ -1,5 +1,5 @@
 [project]
-name = "triage"
+name = "agent"
 version = "0.1.0"
 description = "Triage Support Tickets from Kaggle Dataset"
 readme = "README.md"
@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [project.scripts]
-triage = "triage:main"
+triage = "agent:main"
 
 [build-system]
 requires = ["uv_build>=0.12.18,<0.13.0"]
