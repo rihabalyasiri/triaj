@@ -1,0 +1,19 @@
+[project]
+name = "triage"
+version = "0.1.0"
+description = "Triage Support Tickets from Kaggle Dataset"
+readme = "README.md"
+authors = [
+    { name = "Rihab Al-Yasiri", email = "rihab.al-yasiri@web.de" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "pandas>=3.0.6",
+]
+
+[project.scripts]
+triage = "triage:main"
+
+[build-system]
+requires = ["uv_build>=0.12.18,<0.13.0"]
+build-backend = "uv_build"
