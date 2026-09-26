@@ -13,3 +13,4 @@ wheels/
 aa_dataset-tickets-multi-lang-5-2-50-version-selected-columns.csv
 
 .DS_Store
+.env
