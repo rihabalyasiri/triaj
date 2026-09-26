@@ -8,7 +8,13 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "mcp>=1.10,<2",
+    "openai>=3.19.2",
     "pandas>=3.0.6",
+    "qwen-agent>=0.0.34",
+    "soundfile>=0.14.0",
+    "transformers>=5.17.0",
+    "uuid>=1.30",
 ]
 
 [project.scripts]
