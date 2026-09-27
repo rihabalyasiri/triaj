@@ -1,8 +1,7 @@
 # preprocessor.py
 from pandas import DataFrame
 
-# TODO: there are some wrong language type
-# TODO: subjects are in english
+
 def preprocessing(data: DataFrame) -> list[str]:
     # use german data
     df = data[data['language'] == 'de']
