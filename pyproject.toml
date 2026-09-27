@@ -9,10 +9,13 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "mcp>=1.10,<2",
+    "ollama>=0.6.2",
     "openai>=3.19.2",
     "pandas>=3.0.6",
     "qwen-agent>=0.0.34",
+    "rich>=15.0.0",
     "soundfile>=0.14.0",
+    "torch>=2.14.0",
     "transformers>=5.17.0",
     "uuid>=1.30",
 ]
