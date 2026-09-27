@@ -1,34 +1,191 @@
 # cli.py
-
 import argparse
 import json
+import os
+import warnings
 from itertools import islice
 
-from agent.enricher import preprocessing  
-from agent.suggester import triage
-from agent.adapter import read_file
-from agent.writer import write_results
+# --- Silence library noise. Must run BEFORE transformers ---
+os.environ.setdefault("HF_HUB_VERBOSITY", "error")          # "unauthenticated requests" warning
+os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")  # download bars
+os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
+warnings.filterwarnings("ignore", category=FutureWarning)   # torch.jit warning on Python 3.14
 
+from transformers.utils import logging as hf_logging  # noqa: E402
+hf_logging.set_verbosity_error()
+hf_logging.disable_progress_bar()                     # "Loading weights" bar
+
+from rich import box                                   # noqa: E402
+from rich.console import Console, Group                # noqa: E402
+from rich.panel import Panel                           # noqa: E402
+from rich.table import Table                           # noqa: E402
+from rich.text import Text                             # noqa: E402
+
+from agent.enricher import preprocessing               # noqa: E402
+from agent.adapter import read_file                    # noqa: E402
+from agent.writer import open_results, OUT_PATH        # noqa: E402
+from agent.triage import classify_ticket, predict_priority  # noqa: E402
+from agent.action import decide_action                 # noqa: E402
+from agent.checker import check_ticket, check_to_row, OLLAMA_MODEL  # noqa: E402
+
+console = Console()
+
+PRIORITY_STYLE = {"high": "bold red", "medium": "yellow", "low": "green"}
+ESCALATE_ACTION = "escalate to human supervisor"
+ASK_CUSTOMER_ACTION = "ask customer for more information"
+
+
+# ---------------------------------------------------------------------------
+# Pipeline
+# ---------------------------------------------------------------------------
+
+def triage_record(i: int, message: str, use_llm: bool = True) -> dict:
+    """Topic -> priority -> action -> LLM check for one ticket, merged into one row."""
+    row = {"id": i, "message": message}
+    try:
+        topic = classify_ticket(message)         
+        row.update(topic)
+
+        priority = predict_priority(message, topic["predicted_topic"])
+        row.update(priority)                     
+
+        action = decide_action(topic["predicted_topic"], priority["priority"])
+        row.update(action)                        
+    except Exception as e:
+        row["error"] = str(e)
+        row["status"] = "error"
+        return row
+
+    if use_llm:
+        try:
+            check = check_ticket(message, topic["predicted_topic"],
+                                 priority["priority"], action["escalated"])
+        except Exception as e:
+            # Keep the NLI result; mark the row so you can re-run the check later.
+            row["error"] = f"LLM check failed: {e}"
+            row["status"] = "partial"
+            return row
+
+        row.update(check_to_row(check))
+
+        # Final decision: escalate if EITHER the rules or the LLM say so (safer),
+        # otherwise ask the customer when the ticket is ambiguous.
+        if check.should_escalate and not row["escalated"]:
+            row["escalated"] = True
+            row["action"] = ESCALATE_ACTION
+        elif check.ambiguous and not row["escalated"]:
+            row["action"] = ASK_CUSTOMER_ACTION
+
+    row["status"] = "ok"
+    return row
+
+
+# ---------------------------------------------------------------------------
+# Rendering
+# ---------------------------------------------------------------------------
+
+def shorten(text, width: int = 220) -> str:
+    text = " ".join(str(text).split())
+    return text if len(text) <= width else text[:width].rstrip() + " …"
+
+
+def render_ticket(row: dict, full: bool = False) -> None:
+    message = str(row["message"]) if full else shorten(row["message"])
+
+    if row.get("status") == "error":
+        body = Group(Text(row.get("error", ""), style="bold red"), Text(""),
+                     Text(message, style="italic dim"))
+        console.print(Panel(body, title=f"Ticket #{row['id']} · error",
+                            title_align="left", border_style="red", box=box.ROUNDED))
+        return
+
+    prio = row["priority"]
+    style = "bold red" if row.get("escalated") else PRIORITY_STYLE.get(prio, "white")
+
+    details = Table.grid(padding=(0, 2))
+    details.add_column(style="dim", justify="right")
+    details.add_column()
+    details.add_row("Topic", Text.assemble(
+        (row["predicted_topic"], "bold"), (f"  confidence {row['confidence']:.2f}", "dim")))
+    details.add_row("Priority", Text.assemble(
+        (prio.upper(), PRIORITY_STYLE.get(prio, "white")),
+        (f"  score {row['priority_score']:.2f} · urgency {row['urgency']:.2f}", "dim")))
+
+    if "llm_topic" in row:
+        details.add_row("LLM review", Text.assemble(
+            ("topic ", "dim"), (row["llm_topic"], "bold"),
+            ("  priority ", "dim"), (row["llm_priority"].upper(), PRIORITY_STYLE.get(row["llm_priority"], "white"))))
+        details.add_row("Ambiguous", Text.assemble(
+            ("yes", "bold yellow") if row["ambiguous"] else ("no", ""),
+            (f"  {row['ambiguity_reason']}", "dim") if row["ambiguous"] else ("", "")))
+
+    details.add_row("Action", Text(row["action"], style="bold"))
+    escalated_text = Text("yes", style="bold red") if row["escalated"] else Text("no")
+    if row["escalated"] and row.get("escalation_reason"):
+        escalated_text.append(f"  {row['escalation_reason']}", style="dim")
+    details.add_row("Escalated", escalated_text)
+
+    parts = [Text(message, style="italic"), Text(""), details]
+
+    if row.get("ambiguous") and row.get("customer_reply"):
+        questions = Text("\n".join(f"• {q}" for q in row["follow_up_questions"].split(" | ") if q))
+        parts += [Text(""), Text("Follow-up questions", style="bold yellow"), questions,
+                  Text(""), Text("Suggested reply to customer", style="bold yellow"),
+                  Text(row["customer_reply"])]
+
+    if row.get("status") == "partial":
+        parts += [Text(""), Text(row.get("error", ""), style="red")]
+
+    console.print(Panel(Group(*parts), title=f"Ticket #{row['id']}", title_align="left",
+                        border_style=style, box=box.ROUNDED))
+
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
 
 def cli_app():
-    # adapter -> enricher -> classifier -> scoring -> action -> final result on cli & write on csv
-    df = read_file("tickets.csv") 
     p = argparse.ArgumentParser(prog="triage", description="Triage tickets from the preprocessor")
     p.add_argument("-n", "--num", type=int, default=None,
                    help="number of records to process (default: all)")
+    p.add_argument("--json", action="store_true",
+                   help="print each result as indented, colored JSON instead of panels")
+    p.add_argument("--full", action="store_true",
+                   help="show the full ticket message instead of a shortened preview")
+    p.add_argument("--no-llm", action="store_true",
+                   help="skip the LLM check (NLI + rules only, much faster)")
     args = p.parse_args()
-
     if args.num is not None and args.num < 1:
         p.error("-n must be >= 1")
+    use_llm = not args.no_llm
 
-    records = islice(preprocessing(df), args.num)  
+    with console.status("Loading tickets…"):
+        df = read_file("tickets.csv")
+    records = islice(preprocessing(df), args.num)
 
-    for i, rec in enumerate(records, start=1):
-    
-        try:
-            result = triage(rec)
-            print(json.dumps({"id": i, "message": rec, **result.model_dump(mode="json")},
-                             ensure_ascii=False))
-            write_results([rec]) 
-        except Exception as e:
-            print(json.dumps({"id": i, "message": rec, "error": str(e)}, ensure_ascii=False))
+    total = errors = escalated = ambiguous = 0
+    with open_results() as writer:
+        for i, rec in enumerate(records, start=1):
+            label = f" + {OLLAMA_MODEL} check" if use_llm else ""
+            with console.status(f"Triaging ticket #{i}{label}…"):
+                row = triage_record(i, rec, use_llm=use_llm)
+
+            if args.json:
+                row_out = row if args.full else {**row, "message": shorten(row["message"])}
+                console.print_json(json.dumps(row_out, ensure_ascii=False))
+            else:
+                render_ticket(row, full=args.full)
+
+            writer.writerow(row)  # CSV always gets the full message
+            total += 1
+            errors += row["status"] in ("error", "partial")
+            escalated += bool(row.get("escalated"))
+            ambiguous += bool(row.get("ambiguous"))
+
+    console.print(
+        f"\n[bold]Processed {total} tickets[/bold] · "
+        f"[red]{escalated} escalated[/red] · "
+        f"[yellow]{ambiguous} ambiguous[/yellow] · "
+        f"{'[red]' if errors else '[green]'}{errors} errors[/]\n"
+        f"[dim]Results written to {OUT_PATH.resolve()}[/dim]"
+    )
