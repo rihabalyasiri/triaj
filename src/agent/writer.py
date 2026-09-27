@@ -1,17 +1,37 @@
 # writer.py
-
 import csv
-import json
+from contextlib import contextmanager
 from pathlib import Path
 
-FIELDS = ["id", "message", "predicted_topic", "priority", "action", "escalated", "error"]
+FIELDS = [
+    "id",
+    "message",
+    # fields from NLI classifier
+    "predicted_topic",
+    "confidence",
+    "priority",
+    "priority_score",
+    "urgency",
+    "action",
+    "escalated",
+    # fields from LLM check
+    "ambiguous",
+    "ambiguity_reason",
+    "follow_up_questions",
+    "customer_reply",
+    "llm_topic",
+    "llm_priority",
+    "llm_escalate",
+    "escalation_reason",
+    "status",
+    "error",
+]
+OUT_PATH = Path("triage_results.csv")
 
-out_path = Path("triage_results.csv")
 
-def write_results(record):
-    with out_path.open("w", newline="", encoding="utf-8-sig") as f:
+@contextmanager
+def open_results(path: Path = OUT_PATH):
+    with path.open("w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=FIELDS, extrasaction="ignore")
         writer.writeheader()
-
-        writer.writerow(record)
-        f.flush()   
+        yield writer
