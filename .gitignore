@@ -10,7 +10,7 @@ wheels/
 .venv
 
 # Kaggle Dataset
-aa_dataset-tickets-multi-lang-5-2-50-version-selected-columns.csv
+tickets.csv
 
 .DS_Store
 .env
