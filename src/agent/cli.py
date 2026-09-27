@@ -11,22 +11,22 @@ os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")  # download bars
 os.environ.setdefault("TRANSFORMERS_VERBOSITY", "error")
 warnings.filterwarnings("ignore", category=FutureWarning)   # torch.jit warning on Python 3.14
 
-from transformers.utils import logging as hf_logging  # noqa: E402
+from transformers.utils import logging as hf_logging  
 hf_logging.set_verbosity_error()
-hf_logging.disable_progress_bar()                     # "Loading weights" bar
+hf_logging.disable_progress_bar()                    
 
-from rich import box                                   # noqa: E402
-from rich.console import Console, Group                # noqa: E402
-from rich.panel import Panel                           # noqa: E402
-from rich.table import Table                           # noqa: E402
-from rich.text import Text                             # noqa: E402
+from rich import box                                   
+from rich.console import Console, Group                
+from rich.panel import Panel                          
+from rich.table import Table                           
+from rich.text import Text                             
 
-from agent.enricher import preprocessing               # noqa: E402
-from agent.adapter import read_file                    # noqa: E402
-from agent.writer import open_results, OUT_PATH        # noqa: E402
-from agent.triage import classify_ticket, predict_priority  # noqa: E402
-from agent.action import decide_action                 # noqa: E402
-from agent.checker import check_ticket, check_to_row, OLLAMA_MODEL  # noqa: E402
+import agent.enricher             
+import agent.adapter                   
+import agent.writer      
+import agent.triage
+import agent.action                 
+import agent.checker 
 
 console = Console()
 
@@ -43,13 +43,13 @@ def triage_record(i: int, message: str, use_llm: bool = True) -> dict:
     """Topic -> priority -> action -> LLM check for one ticket, merged into one row."""
     row = {"id": i, "message": message}
     try:
-        topic = classify_ticket(message)         
+        topic = agent.triage.classify_ticket(message)         
         row.update(topic)
 
-        priority = predict_priority(message, topic["predicted_topic"])
+        priority = agent.triage.predict_priority(message, topic["predicted_topic"])
         row.update(priority)                     
 
-        action = decide_action(topic["predicted_topic"], priority["priority"])
+        action = agent.action.decide_action(topic["predicted_topic"], priority["priority"])
         row.update(action)                        
     except Exception as e:
         row["error"] = str(e)
@@ -58,7 +58,7 @@ def triage_record(i: int, message: str, use_llm: bool = True) -> dict:
 
     if use_llm:
         try:
-            check = check_ticket(message, topic["predicted_topic"],
+            check = agent.checker.check_ticket(message, topic["predicted_topic"],
                                  priority["priority"], action["escalated"])
         except Exception as e:
             # Keep the NLI result; mark the row so you can re-run the check later.
@@ -66,7 +66,7 @@ def triage_record(i: int, message: str, use_llm: bool = True) -> dict:
             row["status"] = "partial"
             return row
 
-        row.update(check_to_row(check))
+        row.update(agent.checker.check_to_row(check))
 
         # Final decision: escalate if EITHER the rules or the LLM say so (safer),
         # otherwise ask the customer when the ticket is ambiguous.
@@ -160,13 +160,13 @@ def cli_app():
     use_llm = not args.no_llm
 
     with console.status("Loading tickets…"):
-        df = read_file("tickets.csv")
-    records = islice(preprocessing(df), args.num)
+        df = agent.adapter.read_file("tickets.csv")
+    records = islice(agent.enricher.preprocessing(df), args.num)
 
     total = errors = escalated = ambiguous = 0
-    with open_results() as writer:
+    with agent.writer.open_results() as writer:
         for i, rec in enumerate(records, start=1):
-            label = f" + {OLLAMA_MODEL} check" if use_llm else ""
+            label = f" + {agent.checker.OLLAMA_MODEL} check" if use_llm else ""
             with console.status(f"Triaging ticket #{i}{label}…"):
                 row = triage_record(i, rec, use_llm=use_llm)
 
@@ -187,5 +187,5 @@ def cli_app():
         f"[red]{escalated} escalated[/red] · "
         f"[yellow]{ambiguous} ambiguous[/yellow] · "
         f"{'[red]' if errors else '[green]'}{errors} errors[/]\n"
-        f"[dim]Results written to {OUT_PATH.resolve()}[/dim]"
+        f"[dim]Results written to {agent.writer.OUT_PATH.resolve()}[/dim]"
     )
