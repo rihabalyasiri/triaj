@@ -1,4 +1,16 @@
-Getting Started
+## Description
+It is an AI Agent Triage for custommer support tickets, it use dataset from Kaggle and it follow...
+
+## Requirement
+- It need a device with GPU size xx
+- uv dependecy install
+- python => 3.14
+- download the Kaggle dataset need in the app and save it in the project level with the name "tickets.csv", from the link below xx
+
+
+## Getting Started
+To run the AI Agent, open terminal in project level and run:
+`uv run triage -n <number>` for example `uv run triage -n 200`
 
 Questionnaire
 A. Problem understanding
