@@ -5,7 +5,7 @@
 
 from transformers import pipeline
 
-MODEL_NAME = "MoritzLaurer/mDeBERTa-v3-base-mnli-xnli"
+MODEL_NAME = "MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7"
 classifier = pipeline("zero-shot-classification", model=MODEL_NAME)
 
 
@@ -14,7 +14,7 @@ classifier = pipeline("zero-shot-classification", model=MODEL_NAME)
 # ---------------------------------------------------------------------------
 
 TOPIC_DESCRIPTIONS = {
-    "Contract": "a contract, policy, cancellation or change of contract details",
+    "Policy": "buying a new insurance policy, a price quote or offer, or changing or cancelling an existing policy or contract",
     "Claim": "an insurance claim, a damage or an accident",
     "Billing": "an invoice, a payment, a premium or a refund",
     "Technical": "a technical problem with the website, app, login or account",
@@ -60,31 +60,31 @@ def classify_ticket(message: str) -> dict:
 
 TOPIC_BASE_PRIORITY = {
     "Claim": 0.7,
+    "Technical": 0.6,
     "Billing": 0.5,
-    "Technical": 0.5,
-    "Contract": 0.4,
+    "Policy": 0.5,
     "Other": 0.2,
 }
 
 URGENT_KEYWORDS = (
-    "urgent", "asap", "immediately", "emergency", "deadline",
-    "dringend", "sofort", "eilig", "notfall", "frist", "unfall",
+    "urgent", "asap", "immediately", "emergency", "deadline", "security",
+    "dringend", "sofort", "eilig", "notfall", "frist", "unfall", "ausfall", "vorfall",
 )
 
 URGENCY_WEIGHT = 0.6
 TOPIC_WEIGHT = 0.4
 KEYWORD_BOOST = 0.2
 
-PRIORITY_THRESHOLDS = (("high", 0.65), ("medium", 0.40))
+PRIORITY_THRESHOLDS = (("high", 0.9), ("medium", 0.50))
 
 
 def predict_priority(message: str, predicted_topic: str) -> dict:
-    """Return {"priority", "priority_score", "urgency"} for one ticket.
+    """Return {"predicted_priority", "priority_score", "urgency"} for one ticket.
 
     score = 0.6 * NLI urgency + 0.4 * topic base priority (+0.2 on urgent keywords)
     """
     if not message or not str(message).strip():
-        return {"priority": "low", "priority_score": 0.0, "urgency": 0.0}
+        return {"predicted_priority": "low", "priority_score": 0.0, "urgency": 0.0}
 
     output = classifier(
         message,
@@ -92,7 +92,9 @@ def predict_priority(message: str, predicted_topic: str) -> dict:
         hypothesis_template="This request is {}.",
         multi_label=False,
     )
+   
     urgency = float(dict(zip(output["labels"], output["scores"]))["urgent"])
+  
 
     base = TOPIC_BASE_PRIORITY.get(predicted_topic, TOPIC_BASE_PRIORITY["Other"])
     keyword_hit = any(k in message.lower() for k in URGENT_KEYWORDS)
@@ -109,7 +111,7 @@ def predict_priority(message: str, predicted_topic: str) -> dict:
             break
 
     return {
-        "priority": priority,
+        "predicted_priority": priority,
         "priority_score": round(score, 4),
         "urgency": round(urgency, 4),
     }
