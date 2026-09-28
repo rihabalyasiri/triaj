@@ -6,12 +6,15 @@ from pathlib import Path
 FIELDS = [
     "id",
     "message",
+    "queue",
+    "priority",
     # fields from NLI classifier
     "predicted_topic",
     "confidence",
-    "priority",
+    "predicted_priority",
     "priority_score",
     "urgency",
+    # fields from action decision
     "action",
     "escalated",
     # fields from LLM check
