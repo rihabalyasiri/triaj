@@ -5,14 +5,16 @@ This is an AI agent for triaging customer support tickets. It uses a dataset fro
 ![Architecture of the AI Agent](./pics/architecture.png)
 
 ## Requirements
-- A device with at least 8 GB of RAM
+- A device with 16 GB of RAM is recommended
 - The uv project manager; installation instructions: https://pypi.org/project/uv/
 - Ollama, to run the open-source LLM; installation instructions: https://ollama.com/download
-- qwen3:8b (via Ollama); installation instructions: https://ollama.com/library/qwen3
+- qwen3:8b (via Ollama); installation instructions: https://ollama.com/library/qwen3 or `ollama pull qwen3:8b`then make sure to run ollama app with `ollama serve`
 - Python >= 3.14
 - The Kaggle dataset used by the app, downloaded from the link below and saved at the project level with the name `tickets.csv`: https://www.kaggle.com/datasets/tobiasbueck/multilingual-customer-support-tickets
 
 ## Getting Started
+First install all the dependencies needed for the agent, run in project level `uv sync`.
+
 To run the AI agent, open a terminal at the project level and run:
 `uv run triage -n <number>`, for example `uv run triage -n 200`
 
@@ -39,7 +41,7 @@ The enricher uses German-language tickets only, based on the assumption that the
 
 - What preprocessing steps did you apply, and why were they necessary or helpful?
 
-The enricher filters the tickets to German only, to focus on a single language; however, the NLI model and the LLM are multilingual, so mixed languages will not affect the quality of the results. Another step replaces null values in the subject and body with an empty string, to avoid null/NaN values in the text. Symbols and newlines are removed from the body, because they count as tokens and increase the cost (if the models are not open-source) and do not affect the results.
+The enricher filters the tickets to German only, to focus on a single language; however, the NLI model and the LLM are multilingual, so mixed languages will not affect the quality of the results. Another step replaces null values in the subject and body with an empty string, to avoid null/NaN values in the text. Symbols and newlines are removed from the body, because they are noise reduction and do not affect the results.
 
 ## C. Architecture and tools
 - Describe your overall architecture, including main components and their responsibilities.
@@ -63,7 +65,7 @@ Reasons / facts about qwen3:8b:
 
 It also uses an NLI model for classification.
 Facts about the NLI model:
-- Open source, from Hugging Face: https://huggingface.co/MoritzLaurer/mDeBERTa-v3-base-mnli-xnli
+- Open source, from Hugging Face: MoritzLaurer/mDeBERTa-v3-base-xnli-multilingual-nli-2mil7
 - Multilingual (up to 16 languages)
 - Zero-shot classification
 - Model size: 0.3B
@@ -84,8 +86,14 @@ For classification, the agent uses an NLI model, as it is fast and adequate for 
 
 ## E. End-to-end testing and evaluation
 - How did you test your triage agent end-to-end?
-- Please describe concrete test scenarios, for example normal tickets, very short tickets, long or complex tickets, and obviously out-of-scope tickets.
+Due to time constraints, the triage agent was tested manually: I read a sample of requests and checked their classification by hand.
+With more time, I would combine several types of tests to verify the quality of the agent:
+1. Unit tests: test the deterministic components, such as the action and enricher components.
+2. Evaluation tests: compare the triage results with a ground-truth sample and measure how accurate the agent is.
+3. End-to-end tests: check the full flow of the agent, from reading the dataset to writing the results to the CSV file, to prove that all components are called in the right order and nothing fails.
+
 - Which metrics or signals would you track to know whether the system works well over time?
+AI systems differ from classical software, so it is important to track the models' output over time: check that it is always structured correctly so it does not break the next component, evaluate the quality of the classifications and the LLM responses, and check that the LLM does not produce harmful responses for customers.
 
 ## F. Limitations and improvements
 - What are the main limitations of your current prototype, including technical, data, and quality limitations?
@@ -97,7 +105,8 @@ On the data side, the dataset consists of IT support tickets, not insurance tick
 
 With more time to invest in this agent, I would address several important aspects that were left out because this is a prototype:
 1. Migrate the Python agent to LangChain for better structure, readability, scalability, and maintainability.
-2. Test different NLI models and LLMs to see which ones produce better results.
+2a. Test different NLI models and LLMs to see which ones produce better results.
+2b. As NLI comparing to Text Classification models perform lower, would fine-tune a model on dataset with labels, for better results.
 3. Increase test coverage for a more robust agent.
 4. Add logging for better monitoring of long runs.
 5. Deploy the agent on AWS and monitor the latency.
