@@ -105,9 +105,10 @@ On the data side, the dataset consists of IT support tickets, not insurance tick
 
 With more time to invest in this agent, I would address several important aspects that were left out because this is a prototype:
 1. Migrate the Python agent to LangChain for better structure, readability, scalability, and maintainability.
-2a. Test different NLI models and LLMs to see which ones produce better results.
-2b. As NLI comparing to Text Classification models perform lower, would fine-tune a model on dataset with labels, for better results.
-3. Increase test coverage for a more robust agent.
-4. Add logging for better monitoring of long runs.
-5. Deploy the agent on AWS and monitor the latency.
-6. Change the architecture to email polling instead of reading a CSV dataset.
+2. Test different NLI models and LLMs to see which ones produce better results.
+3. As NLI comparing to Text Classification models perform lower, would fine-tune a model on dataset with labels, for better results.
+4. Connect LLM with knoweldege-base as noticed that high number of the tickets assign as ambiguous due to lack of knowledge about the company infrastructure etc.
+5. Increase test coverage for a more robust agent.
+6. Add logging for better monitoring of long runs.
+7. Deploy the agent on AWS and monitor the latency.
+8. Change the architecture to email polling instead of reading a CSV dataset.
