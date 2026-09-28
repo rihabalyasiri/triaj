@@ -49,7 +49,7 @@ def triage_record(i: int, message: str, use_llm: bool = True) -> dict:
         priority = agent.triage.predict_priority(message, topic["predicted_topic"])
         row.update(priority)                     
 
-        action = agent.action.decide_action(topic["predicted_topic"], priority["priority"])
+        action = agent.action.decide_action(topic["predicted_topic"], priority["predicted_priority"], row["urgency"])
         row.update(action)                        
     except Exception as e:
         row["error"] = str(e)
@@ -59,7 +59,7 @@ def triage_record(i: int, message: str, use_llm: bool = True) -> dict:
     if use_llm:
         try:
             check = agent.checker.check_ticket(message, topic["predicted_topic"],
-                                 priority["priority"], action["escalated"])
+                                 priority["predicted_priority"], action["escalated"])
         except Exception as e:
             # Keep the NLI result; mark the row so you can re-run the check later.
             row["error"] = f"LLM check failed: {e}"
@@ -68,12 +68,9 @@ def triage_record(i: int, message: str, use_llm: bool = True) -> dict:
 
         row.update(agent.checker.check_to_row(check))
 
-        # Final decision: escalate if EITHER the rules or the LLM say so (safer),
+        # Final decision: escalate if the rules,
         # otherwise ask the customer when the ticket is ambiguous.
-        if check.should_escalate and not row["escalated"]:
-            row["escalated"] = True
-            row["action"] = ESCALATE_ACTION
-        elif check.ambiguous and not row["escalated"]:
+        if check.ambiguous and not row["escalated"]:
             row["action"] = ASK_CUSTOMER_ACTION
 
     row["status"] = "ok"
@@ -99,7 +96,7 @@ def render_ticket(row: dict, full: bool = False) -> None:
                             title_align="left", border_style="red", box=box.ROUNDED))
         return
 
-    prio = row["priority"]
+    prio = row["predicted_priority"]
     style = "bold red" if row.get("escalated") else PRIORITY_STYLE.get(prio, "white")
 
     details = Table.grid(padding=(0, 2))
@@ -168,7 +165,10 @@ def cli_app():
         for i, rec in enumerate(records, start=1):
             label = f" + {agent.checker.OLLAMA_MODEL} check" if use_llm else ""
             with console.status(f"Triaging ticket #{i}{label}…"):
-                row = triage_record(i, rec, use_llm=use_llm)
+                row = triage_record(i, rec.get("message"), use_llm=use_llm)
+                # Ground truth for evaluation only: attached after triage, never seen by the models.
+                row["queue"] = rec["queue"]
+                row["priority"] = rec["priority"]
 
             if args.json:
                 row_out = row if args.full else {**row, "message": shorten(row["message"])}
