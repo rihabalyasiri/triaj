@@ -1,8 +1,8 @@
-# preprocessor.py
+# enricher.py
 from pandas import DataFrame
 
 
-def preprocessing(data: DataFrame) -> list[str]:
+def preprocessing(data: DataFrame) -> list[dict]:
     # use german data
     df = data[data['language'] == 'de']
 
@@ -24,7 +24,14 @@ def preprocessing(data: DataFrame) -> list[str]:
             .str.strip()
         )
 
-    # concat subject and body, return as list
-    return (df['subject'] + ' ' + df['body']).str.strip().tolist()
+    return [
+    {
+        "ticket_id": i,
+        "message": f"{row['subject']} {row['body']}".strip(),
+        "queue": row["queue"], # will be used as ground truth for evaluation only, never seen by the models
+        "priority": row["priority"], # will be used as ground truth for evaluation only, never seen by the models
+    }
+    for i, row in deduplicate.iterrows()
+]
 
 
