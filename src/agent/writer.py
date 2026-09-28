@@ -22,10 +22,6 @@ FIELDS = [
     "ambiguity_reason",
     "follow_up_questions",
     "customer_reply",
-    "llm_topic",
-    "llm_priority",
-    "llm_escalate",
-    "escalation_reason",
     "status",
     "error",
 ]
