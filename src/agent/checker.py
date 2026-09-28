@@ -1,7 +1,7 @@
 # checker.py
 """LLM checker: a local Qwen model (via Ollama) reviews the NLI triage result.
 
-It receives the message, predicted topic, priority and escalation decision and returns:
+It receives the message, predicted topic, predicted priority and escalation decision and returns:
   - whether the ticket is ambiguous (not enough information to act on)
   - if ambiguous: follow-up questions + a ready-to-send reply asking the customer for details
   - its own view on topic, priority and whether to escalate
@@ -32,10 +32,6 @@ class TicketCheck(BaseModel):
     customer_reply: str = Field(
         description="Short, polite reply to the customer in the ticket's language asking for the "
                     "missing information. Empty string if not ambiguous.")
-    suggested_topic: str = Field(description=f"One of: {', '.join(ALLOWED_TOPICS)}.")
-    suggested_priority: Literal["high", "medium", "low"]
-    should_escalate: bool = Field(description="True if a human supervisor must handle this ticket.")
-    escalation_reason: str = Field(description="Short reason for the escalation decision.")
 
 
 _TOPIC_LINES = "\n".join(f"- {label}: {desc}" for label, desc in TOPIC_DESCRIPTIONS.items())
@@ -59,10 +55,8 @@ If ambiguous:
 - write a short, polite customer reply in the SAME language as the ticket that asks exactly these questions
 If not ambiguous: leave ambiguity_reason and customer_reply empty and follow_up_questions as an empty list.
 
-Escalate (should_escalate = true) for security incidents, data breaches, outages affecting many
-users, legal threats, or anything with high business impact, even if the classifier did not.
 
-Judge the ticket content yourself; the classifier is often wrong. Answer only with the JSON object."""
+Judge the ticket content yourself. Answer only with the JSON object."""
 
 
 def check_ticket(message: str, predicted_topic: str, priority: str, escalated: bool,
@@ -96,13 +90,6 @@ def check_ticket(message: str, predicted_topic: str, priority: str, escalated: b
             last_error = e
             continue
 
-       
-        if check.suggested_topic not in ALLOWED_TOPICS:
-            check.suggested_topic = "Other"
-        if not check.ambiguous:
-            check.ambiguity_reason = ""
-            check.follow_up_questions = []
-            check.customer_reply = ""
         return check
 
     raise RuntimeError(f"LLM returned invalid output after {retries + 1} attempts: {last_error}")
@@ -114,9 +101,5 @@ def check_to_row(check: TicketCheck) -> dict:
         "ambiguous": check.ambiguous,
         "ambiguity_reason": check.ambiguity_reason,
         "follow_up_questions": " | ".join(check.follow_up_questions),
-        "customer_reply": check.customer_reply,
-        "llm_topic": check.suggested_topic,
-        "llm_priority": check.suggested_priority,
-        "llm_escalate": check.should_escalate,
-        "escalation_reason": check.escalation_reason,
+        "customer_reply": check.customer_reply
     }
